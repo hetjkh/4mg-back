@@ -53,6 +53,7 @@ app.use('/api/stock-allocation', require('./routes/stockAllocation'));
 app.use('/api/locations', require('./routes/locations'));
 app.use('/api/location-allocation', require('./routes/locationAllocation'));
 app.use('/api/analytics', require('./routes/analytics'));
+app.use('/api/financial', require('./routes/financial'));
 
 // Health check
 app.get('/api/health', (req, res) => {
