@@ -54,6 +54,20 @@ const verifyAdmin = (req, res, next) => {
   next();
 };
 
+// Middleware to verify dealer
+const verifyDealer = (req, res, next) => {
+  if (req.user.role !== 'dealer' && req.user.role !== 'dellear') {
+    return res.status(403).json({ 
+      success: false, 
+      message: 'Access denied. Dealer privileges required.' 
+    });
+  }
+  next();
+};
+
+// Mount dealer analytics routes
+router.use('/dealer', verifyToken, require('./dealerAnalytics'));
+
 // Helper function to format product title
 const formatProductTitle = (product, language = 'en') => {
   if (!product || !product.title) {
