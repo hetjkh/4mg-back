@@ -9,6 +9,7 @@ const DealerStock = require('../models/DealerStock');
 const StockAllocation = require('../models/StockAllocation');
 const multer = require('multer');
 const cloudinary = require('../config/cloudinary');
+const { getLanguage } = require('../middleware/translateMessages');
 
 const router = express.Router();
 
@@ -93,9 +94,23 @@ const verifyStalkist = (req, res, next) => {
   next();
 };
 
+// Helper function to format product title for response
+const formatProductTitle = (product, language = 'en') => {
+  if (!product || !product.title) {
+    return '';
+  }
+  // Handle both old format (string) and new format (object)
+  if (typeof product.title === 'string') {
+    return product.title;
+  }
+  // Handle translation object {en, gu}
+  return product.title[language] || product.title.en || product.title.gu || '';
+};
+
 // Create Dealer Request (Dealer only)
 router.post('/', verifyToken, verifyDealer, async (req, res) => {
   try {
+    const language = getLanguage(req);
     const { productId, strips } = req.body;
 
     if (!productId || !strips) {
@@ -141,7 +156,7 @@ router.post('/', verifyToken, verifyDealer, async (req, res) => {
     await request.populate('product', 'title packetPrice packetsPerStrip image');
     await request.populate('dealer', 'name email');
 
-    // Transform request to ensure all IDs are properly mapped
+    // Transform request to ensure all IDs are properly mapped and format product titles
     const requestObj = request.toObject ? request.toObject() : request;
     const transformedRequest = {
       ...requestObj,
@@ -153,6 +168,7 @@ router.post('/', verifyToken, verifyDealer, async (req, res) => {
       product: requestObj.product ? {
         ...requestObj.product,
         id: requestObj.product._id || requestObj.product.id,
+        title: formatProductTitle(requestObj.product, language),
       } : requestObj.product,
     };
 
@@ -174,6 +190,7 @@ router.post('/', verifyToken, verifyDealer, async (req, res) => {
 // Get All Requests (Admin - all requests, Dealer - own requests, Stalkist - dealers they created)
 router.get('/', verifyToken, async (req, res) => {
   try {
+    const language = getLanguage(req);
     let query = {};
     
     if (req.user.role === 'dealer' || req.user.role === 'dellear') {
@@ -192,7 +209,7 @@ router.get('/', verifyToken, async (req, res) => {
       .populate('paymentVerifiedBy', 'name email')
       .sort({ createdAt: -1 });
 
-    // Transform requests to ensure all IDs are properly mapped
+    // Transform requests to ensure all IDs are properly mapped and format product titles
     const transformedRequests = requests.map(request => {
       const requestObj = request.toObject ? request.toObject() : request;
       return {
@@ -205,6 +222,7 @@ router.get('/', verifyToken, async (req, res) => {
         product: requestObj.product ? {
           ...requestObj.product,
           id: requestObj.product._id || requestObj.product.id,
+          title: formatProductTitle(requestObj.product, language),
         } : requestObj.product,
         processedBy: requestObj.processedBy ? {
           ...requestObj.processedBy,
@@ -286,6 +304,7 @@ router.put('/upi-id', verifyToken, verifyAdmin, async (req, res) => {
 // Get Single Request
 router.get('/:id', verifyToken, async (req, res) => {
   try {
+    const language = getLanguage(req);
     // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ 
@@ -316,7 +335,7 @@ router.get('/:id', verifyToken, async (req, res) => {
       });
     }
 
-    // Transform request to ensure all IDs are properly mapped
+    // Transform request to ensure all IDs are properly mapped and format product titles
     const requestObj = request.toObject ? request.toObject() : request;
     const transformedRequest = {
       ...requestObj,
@@ -328,6 +347,7 @@ router.get('/:id', verifyToken, async (req, res) => {
       product: requestObj.product ? {
         ...requestObj.product,
         id: requestObj.product._id || requestObj.product.id,
+        title: formatProductTitle(requestObj.product, language),
       } : requestObj.product,
       processedBy: requestObj.processedBy ? {
         ...requestObj.processedBy,
@@ -414,10 +434,26 @@ router.put('/:id/upload-receipt', verifyToken, verifyDealer, upload.single('rece
     await request.populate('product', 'title packetPrice packetsPerStrip image');
     await request.populate('dealer', 'name email');
 
+    const language = getLanguage(req);
+    const requestObj = request.toObject ? request.toObject() : request;
+    const transformedRequest = {
+      ...requestObj,
+      id: requestObj._id || requestObj.id,
+      dealer: requestObj.dealer ? {
+        ...requestObj.dealer,
+        id: requestObj.dealer._id || requestObj.dealer.id,
+      } : requestObj.dealer,
+      product: requestObj.product ? {
+        ...requestObj.product,
+        id: requestObj.product._id || requestObj.product.id,
+        title: formatProductTitle(requestObj.product, language),
+      } : requestObj.product,
+    };
+
     res.json({
       success: true,
       message: 'Receipt uploaded successfully. Waiting for admin verification.',
-      data: { request },
+      data: { request: transformedRequest },
     });
   } catch (error) {
     console.error('Upload receipt error:', error);
@@ -468,10 +504,30 @@ router.put('/:id/verify-payment', verifyToken, verifyAdmin, async (req, res) => 
     await request.populate('dealer', 'name email');
     await request.populate('paymentVerifiedBy', 'name email');
 
+    const language = getLanguage(req);
+    const requestObj = request.toObject ? request.toObject() : request;
+    const transformedRequest = {
+      ...requestObj,
+      id: requestObj._id || requestObj.id,
+      dealer: requestObj.dealer ? {
+        ...requestObj.dealer,
+        id: requestObj.dealer._id || requestObj.dealer.id,
+      } : requestObj.dealer,
+      product: requestObj.product ? {
+        ...requestObj.product,
+        id: requestObj.product._id || requestObj.product.id,
+        title: formatProductTitle(requestObj.product, language),
+      } : requestObj.product,
+      paymentVerifiedBy: requestObj.paymentVerifiedBy ? {
+        ...requestObj.paymentVerifiedBy,
+        id: requestObj.paymentVerifiedBy._id || requestObj.paymentVerifiedBy.id,
+      } : requestObj.paymentVerifiedBy,
+    };
+
     res.json({
       success: true,
       message: 'Payment verified successfully. You can now approve the request.',
-      data: { request },
+      data: { request: transformedRequest },
     });
   } catch (error) {
     console.error('Verify payment error:', error);
@@ -523,10 +579,30 @@ router.put('/:id/reject-payment', verifyToken, verifyAdmin, async (req, res) => 
     await request.populate('dealer', 'name email');
     await request.populate('paymentVerifiedBy', 'name email');
 
+    const language = getLanguage(req);
+    const requestObj = request.toObject ? request.toObject() : request;
+    const transformedRequest = {
+      ...requestObj,
+      id: requestObj._id || requestObj.id,
+      dealer: requestObj.dealer ? {
+        ...requestObj.dealer,
+        id: requestObj.dealer._id || requestObj.dealer.id,
+      } : requestObj.dealer,
+      product: requestObj.product ? {
+        ...requestObj.product,
+        id: requestObj.product._id || requestObj.product.id,
+        title: formatProductTitle(requestObj.product, language),
+      } : requestObj.product,
+      paymentVerifiedBy: requestObj.paymentVerifiedBy ? {
+        ...requestObj.paymentVerifiedBy,
+        id: requestObj.paymentVerifiedBy._id || requestObj.paymentVerifiedBy.id,
+      } : requestObj.paymentVerifiedBy,
+    };
+
     res.json({
       success: true,
       message: 'Payment rejected. Dealer can upload a new receipt.',
-      data: { request },
+      data: { request: transformedRequest },
     });
   } catch (error) {
     console.error('Reject payment error:', error);
@@ -623,10 +699,34 @@ router.put('/:id/approve', verifyToken, verifyAdmin, async (req, res) => {
     await request.populate('processedBy', 'name email');
     await request.populate('paymentVerifiedBy', 'name email');
 
+    const language = getLanguage(req);
+    const requestObj = request.toObject ? request.toObject() : request;
+    const transformedRequest = {
+      ...requestObj,
+      id: requestObj._id || requestObj.id,
+      dealer: requestObj.dealer ? {
+        ...requestObj.dealer,
+        id: requestObj.dealer._id || requestObj.dealer.id,
+      } : requestObj.dealer,
+      product: requestObj.product ? {
+        ...requestObj.product,
+        id: requestObj.product._id || requestObj.product.id,
+        title: formatProductTitle(requestObj.product, language),
+      } : requestObj.product,
+      processedBy: requestObj.processedBy ? {
+        ...requestObj.processedBy,
+        id: requestObj.processedBy._id || requestObj.processedBy.id,
+      } : requestObj.processedBy,
+      paymentVerifiedBy: requestObj.paymentVerifiedBy ? {
+        ...requestObj.paymentVerifiedBy,
+        id: requestObj.paymentVerifiedBy._id || requestObj.paymentVerifiedBy.id,
+      } : requestObj.paymentVerifiedBy,
+    };
+
     res.json({
       success: true,
       message: 'Request approved successfully',
-      data: { request },
+      data: { request: transformedRequest },
     });
   } catch (error) {
     console.error('Approve request error:', error);
@@ -676,10 +776,30 @@ router.put('/:id/cancel', verifyToken, verifyAdmin, async (req, res) => {
     await request.populate('dealer', 'name email');
     await request.populate('processedBy', 'name email');
 
+    const language = getLanguage(req);
+    const requestObj = request.toObject ? request.toObject() : request;
+    const transformedRequest = {
+      ...requestObj,
+      id: requestObj._id || requestObj.id,
+      dealer: requestObj.dealer ? {
+        ...requestObj.dealer,
+        id: requestObj.dealer._id || requestObj.dealer.id,
+      } : requestObj.dealer,
+      product: requestObj.product ? {
+        ...requestObj.product,
+        id: requestObj.product._id || requestObj.product.id,
+        title: formatProductTitle(requestObj.product, language),
+      } : requestObj.product,
+      processedBy: requestObj.processedBy ? {
+        ...requestObj.processedBy,
+        id: requestObj.processedBy._id || requestObj.processedBy.id,
+      } : requestObj.processedBy,
+    };
+
     res.json({
       success: true,
       message: 'Request cancelled successfully',
-      data: { request },
+      data: { request: transformedRequest },
     });
   } catch (error) {
     console.error('Cancel request error:', error);
@@ -694,6 +814,7 @@ router.put('/:id/cancel', verifyToken, verifyAdmin, async (req, res) => {
 // Get Dealer Statistics (Stalkist only - for dealers they created)
 router.get('/dealer/:dealerId/stats', verifyToken, verifyStalkist, async (req, res) => {
   try {
+    const language = getLanguage(req);
     const { dealerId } = req.params;
 
     // Verify that this dealer was created by the stalkist
@@ -759,20 +880,23 @@ router.get('/dealer/:dealerId/stats', verifyToken, verifyStalkist, async (req, r
           totalValueRequested: totalValueRequested.toFixed(2),
           totalValueApproved: totalValueApproved.toFixed(2),
         },
-        requests: requests.map(r => ({
-          id: r._id,
-          product: {
-            id: r.product._id,
-            title: r.product.title,
-            packetPrice: r.product.packetPrice,
-            packetsPerStrip: r.product.packetsPerStrip,
-          },
-          strips: r.strips,
-          status: r.status,
-          requestedAt: r.requestedAt,
-          processedAt: r.processedAt,
-          totalValue: (r.strips * r.product.packetsPerStrip * r.product.packetPrice).toFixed(2),
-        })),
+        requests: requests.map(r => {
+          const productObj = r.product.toObject ? r.product.toObject() : r.product;
+          return {
+            id: r._id,
+            product: {
+              id: productObj._id || productObj.id,
+              title: formatProductTitle(productObj, language),
+              packetPrice: productObj.packetPrice,
+              packetsPerStrip: productObj.packetsPerStrip,
+            },
+            strips: r.strips,
+            status: r.status,
+            requestedAt: r.requestedAt,
+            processedAt: r.processedAt,
+            totalValue: (r.strips * productObj.packetsPerStrip * productObj.packetPrice).toFixed(2),
+          };
+        }),
       },
     });
   } catch (error) {
